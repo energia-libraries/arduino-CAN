@@ -6,6 +6,8 @@
 
 #ifdef ARDUINO_ARCH_ESP32
 #include "ESP32SJA1000.h"
+#elif defined ENERGIA_ARCH_TIVAC
+#include "TM4C12X.h"
 #else
 #include "MCP2515.h"
 #endif
