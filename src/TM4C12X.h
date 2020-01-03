@@ -40,10 +40,12 @@ private:
   void reset();
 
   void handleInterrupt();
-  static void onInterrupt(void* arg);
+  static void onInterrupt();
 
 private:
+  bool _pins_conf;
   bool _loopback;
+  bool _begun;
   static void _intrHandle();
 };
 
