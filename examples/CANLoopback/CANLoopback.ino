@@ -6,7 +6,7 @@
 void setup() {
   Serial.begin(9600);
 
-  Serial.println("CAN Receiver");
+  Serial.println("CAN Loopback");
   
   // start the CAN bus at 500 kbps
   if (!CAN.begin(500E3)) {
