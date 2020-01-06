@@ -10,11 +10,15 @@
 #include "CANController.h"
 #include <driverlib/can.h>
 
+#define NUM_PINS 3
+
 class TM4C12XClass : public CANControllerClass {
 
 public:
   TM4C12XClass();
+  TM4C12XClass(uint8_t);
   virtual ~TM4C12XClass();
+  
   virtual int begin(long baudRate);
   virtual void end();
 
@@ -43,13 +47,15 @@ private:
   static void onInterrupt();
 
 private:
+  static uint8_t _module;
   bool _pins_conf;
   bool _loopback;
   bool _begun;
   static void _intrHandle();
 };
 
-extern TM4C12XClass CAN;
-
+extern TM4C12XClass CAN0;
+extern TM4C12XClass CAN1;
+#define CAN CAN0
 #endif // ENERGIA_ARCH_TIVAC
 #endif // TM4C12X_H

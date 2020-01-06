@@ -15,12 +15,33 @@
 #include <algorithm>
 #include <iterator> 
 
+static const uint8_t can_rx_pin_nums[][NUM_PINS] = {{28, 58, 59}, {17, NULL, NULL}};
+static const uint8_t can_tx_pin_nums[][NUM_PINS] = {{31, 57, 60}, {18, NULL, NULL}};
+static const uint8_t can_rx_pin_names[][NUM_PINS] = {{GPIO_PF0_CAN0RX, GPIO_PB4_CAN0RX, GPIO_PE4_CAN0RX}, {GPIO_PA0_CAN1RX, NULL, NULL}};
+static const uint8_t can_gpio_rx_pin_nums[][NUM_PINS] = {{GPIO_PIN_0, GPIO_PIN_4, GPIO_PIN_4}, {GPIO_PIN_1, NULL, NULL}};
+static const uint8_t can_tx_pin_names[][NUM_PINS] = {{GPIO_PF3_CAN0TX, GPIO_PB5_CAN0TX, GPIO_PE5_CAN0TX}, {GPIO_PA1_CAN1TX, NULL, NULL}};
+static const uint8_t can_gpio_tx_pin_nums[][NUM_PINS] = {{GPIO_PIN_3, GPIO_PIN_5, GPIO_PIN_5}, {GPIO_PIN_1, NULL, NULL}};
+
+static const uint8_t can_gpio_base_names[][NUM_PINS] = {{GPIO_PORTF_BASE, GPIO_PORTB_BASE, GPIO_PORTE_BASE}, {GPIO_PORTA_BASE, NULL, NULL}};
+static const uint8_t can_sysctl_periph[][NUM_PINS] = {{SYSCTL_PERIPH_GPIOF, SYSCTL_PERIPH_GPIOB, SYSCTL_PERIPH_GPIOE}, {SYSCTL_PERIPH_GPIOA, NULL, NULL}};
+static const uint32_t can_base[] = {CAN0_BASE, CAN1_BASE};
+static const uint32_t can_sys_perf[] = {SYSCTL_PERIPH_CAN0, SYSCTL_PERIPH_CAN1};
+static const uint8_t can_int[] = {INT_CAN0, INT_CAN1};
 #define TX_MSG_OBJECT 2
+
+uint8_t TM4C12XClass::_module = 0;
 
 TM4C12XClass::TM4C12XClass() :
   CANControllerClass(),
   _loopback(false)
 {
+}
+
+TM4C12XClass::TM4C12XClass(uint8_t module) :
+  CANControllerClass(),
+  _loopback(false)
+{
+  _module = module;
 }
 
 TM4C12XClass::~TM4C12XClass()
@@ -36,40 +57,40 @@ int TM4C12XClass::begin(long baudRate)
     setPins(58, 57);
   }
    /* Enable CAN Module */
-   SysCtlPeripheralEnable(SYSCTL_PERIPH_CAN0);
+   SysCtlPeripheralEnable(can_sys_perf[_module]);
 
   /* Wait for the CAN0 module to be ready. */
-  while(!SysCtlPeripheralReady(SYSCTL_PERIPH_CAN0))
+  while(!SysCtlPeripheralReady(can_sys_perf[_module]))
   {
   }
-  
+
   /*
    * Reset the state of all the message objects and the state of the CAN
    * module to a known state.
    */
-  CANInit(CAN0_BASE);
+  CANInit(can_base[_module]);
 
   _loopback = false;
 
-  CANBitRateSet(CAN0_BASE, SysCtlClockGet(), baudRate);
+  CANBitRateSet(can_base[_module], SysCtlClockGet(), baudRate);
 
-  CANIntRegister(CAN0_BASE, onInterrupt);
-  CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
-  IntEnable(INT_CAN0);
+  CANIntRegister(can_base[_module], onInterrupt);
+  CANIntEnable(can_base[_module], CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
+  IntEnable(can_int[_module]);
 
-  CANEnable(CAN0_BASE);
+  CANEnable(can_base[_module]);
   sCANMessage.ui32MsgID = 0;
   sCANMessage.ui32MsgIDMask = 0;
   sCANMessage.ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
   sCANMessage.ui32Flags =  MSG_OBJ_USE_ID_FILTER;
   sCANMessage.ui32MsgLen = 8;
-  CANMessageSet(CAN0_BASE, 1, &sCANMessage, MSG_OBJ_TYPE_RX);
+  CANMessageSet(can_base[_module], 1, &sCANMessage, MSG_OBJ_TYPE_RX);
   return 1;
 }
 
 void TM4C12XClass::end()
 {
-  CANDisable(CAN0_BASE);
+  CANDisable(can_base[_module]);
   CANControllerClass::end();
 }
 
@@ -84,8 +105,8 @@ int TM4C12XClass::endPacket()
   memcpy(pui8MsgData, _txData, _txLength);
   sCANMessage.pui8MsgData = pui8MsgData;
 
-  CANMessageSet(CAN0_BASE, 2, &sCANMessage, MSG_OBJ_TYPE_TX);
-  uint32_t status =  CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
+  CANMessageSet(can_base[_module], 2, &sCANMessage, MSG_OBJ_TYPE_TX);
+  uint32_t status =  CANStatusGet(can_base[_module], CAN_STS_CONTROL);
 
   if(status & CAN_STATUS_TXOK) {
     return 1;
@@ -100,7 +121,7 @@ int TM4C12XClass::parsePacket()
   uint8_t pui8MsgData[8];
 
   sCANMessage.pui8MsgData = pui8MsgData;
-  CANMessageGet(CAN0_BASE, 1, &sCANMessage, 1);
+  CANMessageGet(can_base[_module], 1, &sCANMessage, 1);
 
   /* Message available? */
   if(!sCANMessage.ui32Flags & MSG_OBJ_NEW_DATA) {
@@ -154,8 +175,8 @@ int TM4C12XClass::observe()
 int TM4C12XClass::loopback()
 {
   _loopback = true;
-  HWREG(CAN0_BASE + CAN_O_CTL) |= CAN_CTL_TEST;
-  HWREG(CAN0_BASE + CAN_O_TST) |= CAN_TST_LBACK;
+  HWREG(can_base[_module] + CAN_O_CTL) |= CAN_CTL_TEST;
+  HWREG(can_base[_module] + CAN_O_TST) |= CAN_TST_LBACK;
   return 1;
 }
 
@@ -175,18 +196,6 @@ void TM4C12XClass::setPins(int rx, int tx)
   uint8_t pins;
   uint8_t tx_pos;
   uint8_t rx_pos;
-  uint8_t can0_rx_pin_nums[] = {28, 58, 59};
-  uint8_t can0_tx_pin_nums[] = {31, 57, 60};
-  uint8_t can0_rx_pin_names[] = {GPIO_PF0_CAN0RX, GPIO_PB4_CAN0RX, GPIO_PE4_CAN0RX};
-  uint8_t can0_gpio_rx_pin_nums[] = {GPIO_PIN_0, GPIO_PIN_4, GPIO_PIN_4};
-
-  uint8_t can0_tx_pin_names[] = {GPIO_PF3_CAN0TX, GPIO_PB5_CAN0TX, GPIO_PE5_CAN0TX};
-  uint8_t can0_gpio_tx_pin_nums[] = {GPIO_PIN_3, GPIO_PIN_5, GPIO_PIN_5};
-
-  uint8_t can0_gpio_base_names[] = {GPIO_PORTF_BASE, GPIO_PORTB_BASE, GPIO_PORTE_BASE};
-  uint8_t can0_sysctl_periph[] = {SYSCTL_PERIPH_GPIOF, SYSCTL_PERIPH_GPIOB, SYSCTL_PERIPH_GPIOE};
-  
-  #define NUM_PINS 3
 
   /* setPins need to be called before begin() */
   if(_begun) {
@@ -197,26 +206,26 @@ void TM4C12XClass::setPins(int rx, int tx)
     return;
   }
 
-  exists = std::find(std::begin(can0_rx_pin_nums), std::end(can0_rx_pin_nums), rx) != std::end(can0_rx_pin_nums);
+  exists = std::find(std::begin(can_rx_pin_nums[_module]), std::end(can_rx_pin_nums[_module]), rx) != std::end(can_rx_pin_nums[_module]);
   if(!exists) {
     return;
   }
 
-  exists = std::find(std::begin(can0_tx_pin_nums), std::end(can0_tx_pin_nums), tx) != std::end(can0_tx_pin_nums);
+  exists = std::find(std::begin(can_tx_pin_nums[_module]), std::end(can_tx_pin_nums[_module]), tx) != std::end(can_tx_pin_nums[_module]);
   if(!exists) {
     return;
   }
 
-  rx_pos = std::distance(can0_rx_pin_nums, std::find(can0_rx_pin_nums, can0_rx_pin_nums + NUM_PINS, rx));
-  tx_pos = std::distance(can0_tx_pin_nums, std::find(can0_tx_pin_nums, can0_tx_pin_nums + NUM_PINS, tx));
+  rx_pos = std::distance(can_rx_pin_nums[_module], std::find(can_rx_pin_nums[_module], can_rx_pin_nums[_module] + NUM_PINS, rx));
+  tx_pos = std::distance(can_tx_pin_nums[_module], std::find(can_tx_pin_nums[_module], can_tx_pin_nums[_module] + NUM_PINS, tx));
 
-  GPIOPinConfigure(can0_rx_pin_names[rx_pos]);
-  GPIOPinConfigure(can0_tx_pin_names[tx_pos]);
+  GPIOPinConfigure(can_rx_pin_names[_module][rx_pos]);
+  GPIOPinConfigure(can_tx_pin_names[_module][tx_pos]);
 
-  GPIOPinTypeCAN(can0_gpio_base_names[rx_pos], can0_gpio_rx_pin_nums[rx_pos]);
-  GPIOPinTypeCAN(can0_gpio_base_names[tx_pos], can0_gpio_tx_pin_nums[tx_pos]);
-  SysCtlPeripheralEnable(can0_sysctl_periph[rx_pos]);
-  SysCtlPeripheralEnable(can0_sysctl_periph[tx_pos]);
+  GPIOPinTypeCAN(can_gpio_base_names[_module][rx_pos], can_gpio_rx_pin_nums[_module][rx_pos]);
+  GPIOPinTypeCAN(can_gpio_base_names[_module][tx_pos], can_gpio_tx_pin_nums[_module][tx_pos]);
+  SysCtlPeripheralEnable(can_sysctl_periph[_module][rx_pos]);
+  SysCtlPeripheralEnable(can_sysctl_periph[_module][tx_pos]);
   _pins_conf = true;
 
 }
@@ -240,17 +249,18 @@ void TM4C12XClass::onInterrupt()
 {
   uint32_t ui32Status;
   
-  ui32Status = CANIntStatus(CAN0_BASE, CAN_INT_STS_CAUSE);
+  ui32Status = CANIntStatus(can_base[_module], CAN_INT_STS_CAUSE);
 
   if(ui32Status == CAN_INT_INTID_STATUS) {
-    ui32Status = CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
+    ui32Status = CANStatusGet(can_base[_module], CAN_STS_CONTROL);
   } else if (ui32Status == TX_MSG_OBJECT) {
     CAN.handleInterrupt();
   }
   
-  CANIntClear(CAN0_BASE, ui32Status);
+  CANIntClear(can_base[_module], ui32Status);
 }
 
-TM4C12XClass CAN;
+TM4C12XClass CAN0(0);
+TM4C12XClass CAN1(1);
 
 #endif // ENERGIA_ARCH_TIVAC
