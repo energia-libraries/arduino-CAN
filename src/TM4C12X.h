@@ -10,8 +10,6 @@
 #include "CANController.h"
 #include <driverlib/can.h>
 
-#define NUM_PINS 3
-
 class TM4C12XClass : public CANControllerClass {
 
 public:
@@ -44,10 +42,11 @@ private:
   void reset();
 
   void handleInterrupt();
-  static void onInterrupt();
+  static void CAN0_onInterrupt();
+  static void CAN1_onInterrupt();
 
 private:
-  static uint8_t _module;
+  uint8_t _module;
   bool _pins_conf;
   bool _loopback;
   bool _begun;

@@ -15,6 +15,9 @@
 #include <algorithm>
 #include <iterator> 
 
+#define NUM_PINS 3
+#define TX_MSG_OBJECT 2
+
 static const uint8_t can_rx_pin_nums[][NUM_PINS] = {{28, 58, 59}, {17, NULL, NULL}};
 static const uint8_t can_tx_pin_nums[][NUM_PINS] = {{31, 57, 60}, {18, NULL, NULL}};
 static const uint8_t can_rx_pin_names[][NUM_PINS] = {{GPIO_PF0_CAN0RX, GPIO_PB4_CAN0RX, GPIO_PE4_CAN0RX}, {GPIO_PA0_CAN1RX, NULL, NULL}};
@@ -27,13 +30,11 @@ static const uint8_t can_sysctl_periph[][NUM_PINS] = {{SYSCTL_PERIPH_GPIOF, SYSC
 static const uint32_t can_base[] = {CAN0_BASE, CAN1_BASE};
 static const uint32_t can_sys_perf[] = {SYSCTL_PERIPH_CAN0, SYSCTL_PERIPH_CAN1};
 static const uint8_t can_int[] = {INT_CAN0, INT_CAN1};
-#define TX_MSG_OBJECT 2
-
-uint8_t TM4C12XClass::_module = 0;
 
 TM4C12XClass::TM4C12XClass() :
   CANControllerClass(),
-  _loopback(false)
+  _loopback(false),
+  _module(0)
 {
 }
 
@@ -74,7 +75,12 @@ int TM4C12XClass::begin(long baudRate)
 
   CANBitRateSet(can_base[_module], SysCtlClockGet(), baudRate);
 
-  CANIntRegister(can_base[_module], onInterrupt);
+  if(_module == 0) {
+    CANIntRegister(can_base[_module], CAN0_onInterrupt);
+  } else {
+    CANIntRegister(can_base[_module], CAN1_onInterrupt);
+  }
+
   CANIntEnable(can_base[_module], CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
   IntEnable(can_int[_module]);
 
@@ -236,6 +242,17 @@ void TM4C12XClass::dumpRegisters(Stream& out)
 
 void TM4C12XClass::handleInterrupt()
 {
+
+  uint32_t ui32Status;
+  
+  ui32Status = CANIntStatus(can_base[_module], CAN_INT_STS_CAUSE);
+
+  if(ui32Status == CAN_INT_INTID_STATUS) {
+    ui32Status = CANStatusGet(can_base[_module], CAN_STS_CONTROL);
+  }
+  
+  CANIntClear(can_base[_module], ui32Status);
+
   if(!_onReceive) {
     return;
   }
@@ -245,19 +262,14 @@ void TM4C12XClass::handleInterrupt()
   }
 }
 
-void TM4C12XClass::onInterrupt()
+void TM4C12XClass::CAN0_onInterrupt()
 {
-  uint32_t ui32Status;
-  
-  ui32Status = CANIntStatus(can_base[_module], CAN_INT_STS_CAUSE);
+  CAN0.handleInterrupt();
+}
 
-  if(ui32Status == CAN_INT_INTID_STATUS) {
-    ui32Status = CANStatusGet(can_base[_module], CAN_STS_CONTROL);
-  } else if (ui32Status == TX_MSG_OBJECT) {
-    CAN.handleInterrupt();
-  }
-  
-  CANIntClear(can_base[_module], ui32Status);
+void TM4C12XClass::CAN1_onInterrupt()
+{
+  CAN1.handleInterrupt();
 }
 
 TM4C12XClass CAN0(0);
